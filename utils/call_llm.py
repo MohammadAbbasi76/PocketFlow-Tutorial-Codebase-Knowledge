@@ -5,6 +5,15 @@ import json
 import requests
 from datetime import datetime
 
+
+os.environ['LLM_PROVIDER'] = 'OLLAMA'
+os.environ['OLLAMA_BASE_URL'] = 'http://localhost:11434'
+# os.environ['OLLAMA_MODEL'] = 'deepseek-r1:8b'
+os.environ['OLLAMA_MODEL'] = 'deepseek-coder:1.3b'
+
+print(os.environ['LLM_PROVIDER'])
+print(os.environ['OLLAMA_BASE_URL'])
+print(os.environ['OLLAMA_MODEL'])
 # Configure logging
 log_directory = os.getenv("LOG_DIR", "logs")
 os.makedirs(log_directory, exist_ok=True)
@@ -45,6 +54,9 @@ def save_cache(cache):
 
 def get_llm_provider():
     provider = os.getenv("LLM_PROVIDER")
+    print(f"LLM_PROVIDER: {provider}")
+    print(f"GEMINI_PROJECT_ID: {os.getenv('GEMINI_PROJECT_ID')}")
+    print(f"GEMINI_API_KEY: {os.getenv('GEMINI_API_KEY')}")
     if not provider and (os.getenv("GEMINI_PROJECT_ID") or os.getenv("GEMINI_API_KEY")):
         provider = "GEMINI"
     # if necessary, add ANTHROPIC/OPENAI
@@ -61,8 +73,7 @@ def _call_llm_provider(prompt: str) -> str:
     - <provider>_API_KEY: API key (e.g., OLLAMA_API_KEY, XAI_API_KEY; optional for providers that don't require it)
     The endpoint /v1/chat/completions will be appended to the base URL.
     """
-    logger.info(f"PROMPT: {prompt}") # log the prompt
-
+    logger.info(f"PROMPT: {prompt}")  # log the prompt
     # Read the provider from environment variable
     provider = os.environ.get("LLM_PROVIDER")
     if not provider:
@@ -76,7 +87,8 @@ def _call_llm_provider(prompt: str) -> str:
     # Read the provider-specific variables
     model = os.environ.get(model_var)
     base_url = os.environ.get(base_url_var)
-    api_key = os.environ.get(api_key_var, "")  # API key is optional, default to empty string
+    # API key is optional, default to empty string
+    api_key = os.environ.get(api_key_var, "")
 
     # Validate required variables
     if not model:
@@ -102,9 +114,9 @@ def _call_llm_provider(prompt: str) -> str:
 
     try:
         response = requests.post(url, headers=headers, json=payload)
-        response_json = response.json() # Log the response
+        response_json = response.json()  # Log the response
         logger.info("RESPONSE:\n%s", json.dumps(response_json, indent=2))
-        #logger.info(f"RESPONSE: {response.json()}")
+        # logger.info(f"RESPONSE: {response.json()}")
         response.raise_for_status()
         return response.json()["choices"][0]["message"]["content"]
     except requests.exceptions.HTTPError as e:
@@ -116,15 +128,20 @@ def _call_llm_provider(prompt: str) -> str:
             pass
         raise Exception(error_message)
     except requests.exceptions.ConnectionError:
-        raise Exception(f"Failed to connect to {provider} API. Check your network connection.")
+        raise Exception(
+            f"Failed to connect to {provider} API. Check your network connection.")
     except requests.exceptions.Timeout:
         raise Exception(f"Request to {provider} API timed out.")
     except requests.exceptions.RequestException as e:
-        raise Exception(f"An error occurred while making the request to {provider}: {e}")
+        raise Exception(
+            f"An error occurred while making the request to {provider}: {e}")
     except ValueError:
-        raise Exception(f"Failed to parse response as JSON from {provider}. The server might have returned an invalid response.")
+        raise Exception(
+            f"Failed to parse response as JSON from {provider}. The server might have returned an invalid response.")
 
 # By default, we Google Gemini 2.5 pro, as it shows great performance for code understanding
+
+
 def call_llm(prompt: str, use_cache: bool = True) -> str:
     # Log the prompt
     logger.info(f"PROMPT: {prompt}")
@@ -140,8 +157,10 @@ def call_llm(prompt: str, use_cache: bool = True) -> str:
 
     provider = get_llm_provider()
     if provider == "GEMINI":
+        print("Using Gemini provider")
         response_text = _call_llm_gemini(prompt)
-    else:  # generic method using a URL that is OpenAI compatible API (Ollama, ...)
+    # generic method using a URL that is OpenAI compatible API (Ollama, ...)
+    else:
         response_text = _call_llm_provider(prompt)
 
     # Log the response
@@ -167,14 +186,19 @@ def _call_llm_gemini(prompt: str) -> str:
         )
     elif os.getenv("GEMINI_API_KEY"):
         client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+        print("Using GEMINI_API_KEY for authentication")
+        print(f"GEMINI_API_KEY: {os.getenv('GEMINI_API_KEY')}")
+        print(f"Client: {client}")
     else:
-        raise ValueError("Either GEMINI_PROJECT_ID or GEMINI_API_KEY must be set in the environment")
+        raise ValueError(
+            "Either GEMINI_PROJECT_ID or GEMINI_API_KEY must be set in the environment")
     model = os.getenv("GEMINI_MODEL", "gemini-2.5-pro-exp-03-25")
     response = client.models.generate_content(
         model=model,
         contents=[prompt]
     )
     return response.text
+
 
 if __name__ == "__main__":
     test_prompt = "Hello, how are you?"
@@ -183,3 +207,13 @@ if __name__ == "__main__":
     print("Making call...")
     response1 = call_llm(test_prompt, use_cache=False)
     print(f"Response: {response1}")
+
+
+
+
+# url is http://localhost:11434/
+#  API key can be omitted
+# docker run -it --rm \
+#   -e GEMINI_API_KEY="AIzaSyDQQFL0kX2ScMHnVVG0162Run_xlQCGsv8" \
+#   -v "$(pwd)/output_tutorials":/app/output \
+#   pocketflow-app --dir /home/mj/temp/data-receiver
